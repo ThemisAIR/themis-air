@@ -165,8 +165,9 @@ function openEditor(id) {
   contentArea.addEventListener('input', updatePreview);
   updatePreview();
 
-  // Cancel
+  // Cancel — both buttons
   document.getElementById('btn-cancel-edit').addEventListener('click', closeEditor);
+  document.getElementById('btn-cancel-edit-bottom')?.addEventListener('click', closeEditor);
 
   // Save
   document.getElementById('form-edit').addEventListener('submit', handleSave);
@@ -278,6 +279,9 @@ function handleSave(e) {
     return;
   }
 
+  // 先記住是新增還是編輯（closeEditor 會把 editingId 清掉）
+  const isNew = !editingId;
+
   const article = {
     id: editingId || generateId(),
     title,
@@ -286,10 +290,15 @@ function handleSave(e) {
     content: document.getElementById('editor-content').value,
   };
 
-  saveArticle(article);
-  closeEditor();
-  loadAdminPanel();
-  showToast(editingId ? '日誌已更新 ✓' : '新增成功！日誌已儲存 ✓', 'success');
+  try {
+    saveArticle(article);
+    closeEditor();
+    loadAdminPanel();
+    showToast(isNew ? '新增成功！日誌已儲存 ✓' : '日誌已更新 ✓', 'success');
+  } catch (err) {
+    console.error('[Themis AIR] 儲存失敗：', err);
+    showToast('儲存失敗：' + (err.message || '請檢查瀏覽器儲存空間'), 'error');
+  }
 }
 
 // ── Tag Input ─────────────────────────────────────────────────
@@ -449,7 +458,6 @@ function insertAtCursor(text) {
 function openImageDialog() {
   const overlay = document.createElement('div');
   overlay.className = 'img-dialog-overlay';
-  overlay.id = 'img-dialog-overlay';
   overlay.innerHTML = `
     <div class="img-dialog">
       <h4>📷 插入圖片</h4>
@@ -459,17 +467,15 @@ function openImageDialog() {
         <button class="img-tab" data-panel="url">圖片網址</button>
       </div>
 
-      <!-- Tab: 本地上傳 -->
+      <!-- Tab: 本地上傳（支援多選） -->
       <div class="img-tab-panel active" id="panel-upload">
         <div class="img-upload-area" id="upload-area">
           <span class="upload-icon">🖼️</span>
-          點此選擇圖片，或直接拖曳到此處
-          <input type="file" id="img-file-input" accept="image/*" style="display:none">
+          點此選擇圖片，或直接拖曳（可多選）
+          <input type="file" id="img-file-input" accept="image/*" multiple style="display:none">
         </div>
-        <div class="img-preview" id="img-preview">
-          <img id="img-preview-img" src="" alt="預覽">
-        </div>
-        <p class="img-note">⚠️ 圖片將以 base64 格式嵌入文章。建議單張圖片不超過 1MB，以免影響效能。</p>
+        <div id="img-thumb-grid" style="display:none;margin-top:.75rem"></div>
+        <p class="img-note">⚠️ 圖片以 base64 嵌入文章，單張建議不超過 1MB。</p>
       </div>
 
       <!-- Tab: 圖片網址 -->
@@ -482,7 +488,7 @@ function openImageDialog() {
           <label for="img-alt-input">圖片說明（選填）</label>
           <input type="text" id="img-alt-input" placeholder="圖片說明文字">
         </div>
-        <p class="img-note">💡 可將圖片上傳到 Imgur、Google 相簿等圖床後，貼上連結。</p>
+        <p class="img-note">💡 可將圖片上傳到 Imgur、Google 相簿後貼上連結。</p>
       </div>
 
       <div class="dialog-actions" style="margin-top:1.25rem">
@@ -505,10 +511,11 @@ function openImageDialog() {
     });
   });
 
-  // Upload area click & drag
-  let base64Data = '';
+  // ── 本地上傳（多圖） ───────────────────────────────────────
+  let loadedImages = []; // [{ name, dataUrl }]
   const uploadArea = document.getElementById('upload-area');
   const fileInput  = document.getElementById('img-file-input');
+  const thumbGrid  = document.getElementById('img-thumb-grid');
 
   uploadArea.addEventListener('click', () => fileInput.click());
 
@@ -520,29 +527,73 @@ function openImageDialog() {
   uploadArea.addEventListener('drop', e => {
     e.preventDefault();
     uploadArea.classList.remove('dragover');
-    const file = e.dataTransfer.files[0];
-    if (file) loadImageFile(file);
+    processFiles([...e.dataTransfer.files]);
   });
 
   fileInput.addEventListener('change', () => {
-    if (fileInput.files[0]) loadImageFile(fileInput.files[0]);
+    processFiles([...fileInput.files]);
   });
 
-  function loadImageFile(file) {
-    if (!file.type.startsWith('image/')) {
-      showToast('請選擇圖片檔案', 'error');
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = e => {
-      base64Data = e.target.result; // data:image/...;base64,...
-      const preview = document.getElementById('img-preview');
-      const previewImg = document.getElementById('img-preview-img');
-      previewImg.src = base64Data;
-      preview.style.display = 'block';
-      uploadArea.innerHTML = `<span class="upload-icon">✅</span>${escHtml(file.name)}`;
-    };
-    reader.readAsDataURL(file);
+  function processFiles(files) {
+    const imgs = files.filter(f => f.type.startsWith('image/'));
+    if (!imgs.length) { showToast('請選擇圖片檔案', 'error'); return; }
+
+    loadedImages = [];
+    thumbGrid.innerHTML = '<p style="font-size:.8rem;color:var(--text-muted)">讀取中…</p>';
+    thumbGrid.style.display = 'block';
+
+    let done = 0;
+    const results = new Array(imgs.length);
+
+    imgs.forEach((file, i) => {
+      const reader = new FileReader();
+      reader.onload = ev => {
+        results[i] = { name: file.name, dataUrl: ev.target.result };
+        done++;
+        if (done === imgs.length) {
+          loadedImages = results;
+          renderThumbs();
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // Update upload area label
+    uploadArea.innerHTML = `<span class="upload-icon">✅</span>已選取 ${imgs.length} 張圖片
+      <input type="file" id="img-file-input" accept="image/*" multiple style="display:none">`;
+    // Re-bind after innerHTML reset
+    document.getElementById('img-file-input').addEventListener('change', ev => {
+      processFiles([...ev.target.files]);
+    });
+  }
+
+  function renderThumbs() {
+    thumbGrid.innerHTML = '';
+    const grid = document.createElement('div');
+    grid.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:.5rem';
+    loadedImages.forEach((img, i) => {
+      const cell = document.createElement('div');
+      cell.style.cssText = 'position:relative;border:1px solid var(--border);border-radius:8px;overflow:hidden;aspect-ratio:1';
+      cell.innerHTML = `
+        <img src="${img.dataUrl}" style="width:100%;height:100%;object-fit:cover" alt="${escHtml(img.name)}">
+        <button type="button" onclick="this.closest('[data-idx]').remove()" data-remove="${i}"
+          style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,.55);color:#fff;
+                 border:none;border-radius:50%;width:18px;height:18px;font-size:.75rem;
+                 cursor:pointer;display:flex;align-items:center;justify-content:center">×</button>
+      `;
+      cell.dataset.idx = i;
+      cell.querySelector('[data-remove]').addEventListener('click', () => {
+        loadedImages.splice(i, 1);
+        renderThumbs();
+      });
+      grid.appendChild(cell);
+    });
+    thumbGrid.appendChild(grid);
+    const count = document.createElement('p');
+    count.className = 'img-note';
+    count.style.marginTop = '.4rem';
+    count.textContent = `共 ${loadedImages.length} 張，將依序插入文章`;
+    thumbGrid.appendChild(count);
   }
 
   // Cancel
@@ -551,26 +602,23 @@ function openImageDialog() {
   // Confirm
   document.getElementById('img-confirm').addEventListener('click', () => {
     if (activePanel === 'upload') {
-      if (!base64Data) {
-        showToast('請先選擇一張圖片', 'error');
+      if (!loadedImages.length) {
+        showToast('請先選擇圖片', 'error');
         return;
       }
-      insertAtCursor(`\n![圖片](${base64Data})\n`);
+      const md = loadedImages.map(img => `![${escHtml(img.name)}](${img.dataUrl})`).join('\n\n');
+      insertAtCursor('\n\n' + md + '\n\n');
+      showToast(`已插入 ${loadedImages.length} 張圖片 ✓`, 'success');
     } else {
       const url = document.getElementById('img-url-input').value.trim();
-      if (!url) {
-        showToast('請輸入圖片網址', 'error');
-        return;
-      }
+      if (!url) { showToast('請輸入圖片網址', 'error'); return; }
       const alt = document.getElementById('img-alt-input').value.trim() || '圖片';
-      insertAtCursor(`\n![${alt}](${url})\n`);
+      insertAtCursor(`\n\n![${alt}](${url})\n\n`);
+      showToast('圖片已插入 ✓', 'success');
     }
     overlay.remove();
-    showToast('圖片已插入 ✓', 'success');
   });
 
   // Click outside to close
-  overlay.addEventListener('click', e => {
-    if (e.target === overlay) overlay.remove();
-  });
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
 }
