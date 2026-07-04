@@ -203,7 +203,6 @@ function buildEditorHTML(article) {
           <div class="form-group">
             <label>標籤</label>
             <div class="tags-field" id="tags-field">
-              <!-- chips inserted by JS -->
               <input
                 type="text"
                 class="tag-chip-input"
@@ -223,8 +222,25 @@ function buildEditorHTML(article) {
         <div class="editor-wrap">
           <div class="editor-pane">
             <label for="editor-content">內容（支援 Markdown）</label>
+
+            <!-- Toolbar -->
+            <div class="editor-toolbar" id="editor-toolbar">
+              <button type="button" class="toolbar-btn" onclick="wrapText('**','**')" title="粗體"><b>B</b></button>
+              <button type="button" class="toolbar-btn" onclick="wrapText('*','*')" title="斜體"><i>I</i></button>
+              <div class="toolbar-sep"></div>
+              <button type="button" class="toolbar-btn" onclick="insertLine('## ')" title="標題">H2</button>
+              <button type="button" class="toolbar-btn" onclick="insertLine('### ')" title="小標題">H3</button>
+              <div class="toolbar-sep"></div>
+              <button type="button" class="toolbar-btn" onclick="insertLine('> ')" title="引言">❝</button>
+              <button type="button" class="toolbar-btn" onclick="insertLine('- ')" title="清單">☰</button>
+              <button type="button" class="toolbar-btn" onclick="insertLine('---')" title="分隔線">—</button>
+              <div class="toolbar-sep"></div>
+              <button type="button" class="toolbar-btn" onclick="openImageDialog()" title="插入圖片">📷 插入圖片</button>
+            </div>
+
             <textarea
               id="editor-content"
+              class="has-toolbar"
               placeholder="在這裡寫日誌內容…&#10;&#10;支援 **粗體**、*斜體*、## 標題、> 引言、- 清單等 Markdown 語法"
             >${article ? escHtml(article.content || '') : ''}</textarea>
           </div>
@@ -242,6 +258,7 @@ function buildEditorHTML(article) {
     </div>
   `;
 }
+
 
 function closeEditor() {
   const wrap = document.getElementById('edit-panel-wrap');
@@ -381,4 +398,179 @@ function escHtml(str) {
 
 function escAttr(str) {
   return String(str).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// ── Toolbar helpers ───────────────────────────────────────────
+
+function getEditorTextarea() {
+  return document.getElementById('editor-content');
+}
+
+// Wrap selected text with before/after markers (e.g. **bold**)
+function wrapText(before, after) {
+  const ta = getEditorTextarea();
+  if (!ta) return;
+  const start = ta.selectionStart;
+  const end   = ta.selectionEnd;
+  const selected = ta.value.slice(start, end) || '文字';
+  const replacement = before + selected + after;
+  ta.setRangeText(replacement, start, end, 'select');
+  ta.focus();
+  ta.dispatchEvent(new Event('input'));
+}
+
+// Insert a line prefix at cursor (e.g. ## , - , > )
+function insertLine(prefix) {
+  const ta = getEditorTextarea();
+  if (!ta) return;
+  const pos = ta.selectionStart;
+  // Find start of current line
+  const before = ta.value.lastIndexOf('\n', pos - 1) + 1;
+  const lineStart = ta.value.slice(before, pos);
+  // If line is empty or we're at start, just insert prefix
+  const insert = (lineStart.trim() === '') ? prefix : '\n' + prefix;
+  ta.setRangeText(insert, pos, pos, 'end');
+  ta.focus();
+  ta.dispatchEvent(new Event('input'));
+}
+
+// Insert arbitrary text at cursor
+function insertAtCursor(text) {
+  const ta = getEditorTextarea();
+  if (!ta) return;
+  const pos = ta.selectionStart;
+  ta.setRangeText(text, pos, pos, 'end');
+  ta.focus();
+  ta.dispatchEvent(new Event('input'));
+}
+
+// ── Image Dialog ─────────────────────────────────────────────
+
+function openImageDialog() {
+  const overlay = document.createElement('div');
+  overlay.className = 'img-dialog-overlay';
+  overlay.id = 'img-dialog-overlay';
+  overlay.innerHTML = `
+    <div class="img-dialog">
+      <h4>📷 插入圖片</h4>
+
+      <div class="img-tabs">
+        <button class="img-tab active" data-panel="upload">本地上傳</button>
+        <button class="img-tab" data-panel="url">圖片網址</button>
+      </div>
+
+      <!-- Tab: 本地上傳 -->
+      <div class="img-tab-panel active" id="panel-upload">
+        <div class="img-upload-area" id="upload-area">
+          <span class="upload-icon">🖼️</span>
+          點此選擇圖片，或直接拖曳到此處
+          <input type="file" id="img-file-input" accept="image/*" style="display:none">
+        </div>
+        <div class="img-preview" id="img-preview">
+          <img id="img-preview-img" src="" alt="預覽">
+        </div>
+        <p class="img-note">⚠️ 圖片將以 base64 格式嵌入文章。建議單張圖片不超過 1MB，以免影響效能。</p>
+      </div>
+
+      <!-- Tab: 圖片網址 -->
+      <div class="img-tab-panel" id="panel-url">
+        <div class="form-group">
+          <label for="img-url-input">圖片網址（URL）</label>
+          <input type="url" id="img-url-input" placeholder="https://example.com/image.jpg">
+        </div>
+        <div class="form-group">
+          <label for="img-alt-input">圖片說明（選填）</label>
+          <input type="text" id="img-alt-input" placeholder="圖片說明文字">
+        </div>
+        <p class="img-note">💡 可將圖片上傳到 Imgur、Google 相簿等圖床後，貼上連結。</p>
+      </div>
+
+      <div class="dialog-actions" style="margin-top:1.25rem">
+        <button class="btn btn-secondary btn-sm" id="img-cancel">取消</button>
+        <button class="btn btn-primary btn-sm" id="img-confirm">插入圖片</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  // Tab switching
+  let activePanel = 'upload';
+  overlay.querySelectorAll('.img-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      activePanel = tab.dataset.panel;
+      overlay.querySelectorAll('.img-tab').forEach(t => t.classList.remove('active'));
+      overlay.querySelectorAll('.img-tab-panel').forEach(p => p.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById(`panel-${activePanel}`).classList.add('active');
+    });
+  });
+
+  // Upload area click & drag
+  let base64Data = '';
+  const uploadArea = document.getElementById('upload-area');
+  const fileInput  = document.getElementById('img-file-input');
+
+  uploadArea.addEventListener('click', () => fileInput.click());
+
+  uploadArea.addEventListener('dragover', e => {
+    e.preventDefault();
+    uploadArea.classList.add('dragover');
+  });
+  uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+  uploadArea.addEventListener('drop', e => {
+    e.preventDefault();
+    uploadArea.classList.remove('dragover');
+    const file = e.dataTransfer.files[0];
+    if (file) loadImageFile(file);
+  });
+
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files[0]) loadImageFile(fileInput.files[0]);
+  });
+
+  function loadImageFile(file) {
+    if (!file.type.startsWith('image/')) {
+      showToast('請選擇圖片檔案', 'error');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = e => {
+      base64Data = e.target.result; // data:image/...;base64,...
+      const preview = document.getElementById('img-preview');
+      const previewImg = document.getElementById('img-preview-img');
+      previewImg.src = base64Data;
+      preview.style.display = 'block';
+      uploadArea.innerHTML = `<span class="upload-icon">✅</span>${escHtml(file.name)}`;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  // Cancel
+  document.getElementById('img-cancel').addEventListener('click', () => overlay.remove());
+
+  // Confirm
+  document.getElementById('img-confirm').addEventListener('click', () => {
+    if (activePanel === 'upload') {
+      if (!base64Data) {
+        showToast('請先選擇一張圖片', 'error');
+        return;
+      }
+      insertAtCursor(`\n![圖片](${base64Data})\n`);
+    } else {
+      const url = document.getElementById('img-url-input').value.trim();
+      if (!url) {
+        showToast('請輸入圖片網址', 'error');
+        return;
+      }
+      const alt = document.getElementById('img-alt-input').value.trim() || '圖片';
+      insertAtCursor(`\n![${alt}](${url})\n`);
+    }
+    overlay.remove();
+    showToast('圖片已插入 ✓', 'success');
+  });
+
+  // Click outside to close
+  overlay.addEventListener('click', e => {
+    if (e.target === overlay) overlay.remove();
+  });
 }
