@@ -159,8 +159,9 @@ function openEditor(id) {
   // Live markdown preview
   const contentArea = document.getElementById('editor-content');
   const previewBox = document.getElementById('preview-box');
-  const updatePreview = () => {
-    previewBox.innerHTML = marked.parse(contentArea.value || '');
+  const updatePreview = async () => {
+    const resolved = await resolveImageRefs(contentArea.value || '');
+    previewBox.innerHTML = marked.parse(resolved);
   };
   contentArea.addEventListener('input', updatePreview);
   updatePreview();
@@ -599,16 +600,22 @@ function openImageDialog() {
   // Cancel
   document.getElementById('img-cancel').addEventListener('click', () => overlay.remove());
 
-  // Confirm
-  document.getElementById('img-confirm').addEventListener('click', () => {
+  // Confirm — 圖片存 IndexedDB，文章插入 idb:// 參照
+  document.getElementById('img-confirm').addEventListener('click', async () => {
     if (activePanel === 'upload') {
-      if (!loadedImages.length) {
-        showToast('請先選擇圖片', 'error');
+      if (!loadedImages.length) { showToast('請先選擇圖片', 'error'); return; }
+      try {
+        const refs = await Promise.all(loadedImages.map(async img => {
+          const id = genImgId();
+          await storeImageIDB(id, img.dataUrl);
+          return `![${escHtml(img.name)}](idb://${id})`;
+        }));
+        insertAtCursor('\n\n' + refs.join('\n\n') + '\n\n');
+        showToast(`已插入 ${loadedImages.length} 張圖片 ✓`, 'success');
+      } catch (err) {
+        showToast('圖片儲存失敗：' + err.message, 'error');
         return;
       }
-      const md = loadedImages.map(img => `![${escHtml(img.name)}](${img.dataUrl})`).join('\n\n');
-      insertAtCursor('\n\n' + md + '\n\n');
-      showToast(`已插入 ${loadedImages.length} 張圖片 ✓`, 'success');
     } else {
       const url = document.getElementById('img-url-input').value.trim();
       if (!url) { showToast('請輸入圖片網址', 'error'); return; }

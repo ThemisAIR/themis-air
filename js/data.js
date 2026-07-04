@@ -185,6 +185,8 @@ function deleteArticle(id) {
 
 function generateSummary(content = '', maxLen = 120) {
   const stripped = content
+    .replace(/!\[[^\]]*\]\(idb:\/\/[^)]+\)/g, '[\u5716\u7247]')  // strip IDB refs
+    .replace(/!\[[^\]]*\]\(data:[^)]+\)/g, '[\u5716\u7247]')       // strip base64
     .replace(/#+\s+/g, '')
     .replace(/\*\*([^*]+)\*\*/g, '$1')
     .replace(/\*([^*]+)\*/g, '$1')
@@ -193,7 +195,7 @@ function generateSummary(content = '', maxLen = 120) {
     .replace(/^[-*>]\s+/gm, '')
     .replace(/\n+/g, ' ')
     .trim();
-  return stripped.length > maxLen ? stripped.slice(0, maxLen) + '…' : stripped;
+  return stripped.length > maxLen ? stripped.slice(0, maxLen) + '\u2026' : stripped;
 }
 
 function formatDate(dateStr) {
@@ -212,6 +214,59 @@ function getAllTags() {
 
 function generateId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+// ------------------------------------------------------------------
+//  IndexedDB — Image Storage
+//  圖片 base64 存 IndexedDB（容量遠大於 localStorage）
+//  文章內容用 idb://IMGID 參照，顯示時自動还原
+// ------------------------------------------------------------------
+
+const IDB_NAME = 'themisair_idb';
+let _idb = null;
+
+function _openIDB() {
+  if (_idb) return Promise.resolve(_idb);
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = e => e.target.result.createObjectStore('images');
+    req.onsuccess  = e => { _idb = e.target.result; resolve(_idb); };
+    req.onerror    = () => reject(req.error);
+  });
+}
+
+async function storeImageIDB(id, dataUrl) {
+  const db = await _openIDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('images', 'readwrite');
+    tx.objectStore('images').put(dataUrl, id);
+    tx.oncomplete = resolve;
+    tx.onerror    = () => reject(tx.error);
+  });
+}
+
+async function loadImageIDB(id) {
+  const db = await _openIDB();
+  return new Promise(resolve => {
+    const req = db.transaction('images').objectStore('images').get(id);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror   = () => resolve(null);
+  });
+}
+
+function genImgId() {
+  return 'img_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6);
+}
+
+// 把文章內 idb://ID 參照全部還原為實際 base64 dataUrl
+async function resolveImageRefs(content) {
+  if (!content || !content.includes('idb://')) return content;
+  const ids = [...new Set([...content.matchAll(/\(idb:\/\/([^)]+)\)/g)].map(m => m[1]))];
+  const pairs = await Promise.all(ids.map(async id => [id, await loadImageIDB(id)]));
+  const map = Object.fromEntries(pairs);
+  return content.replace(/\(idb:\/\/([^)]+)\)/g, (_, id) =>
+    map[id] ? `(${map[id]})` : `(idb://${id})`
+  );
 }
 
 // ------------------------------------------------------------------

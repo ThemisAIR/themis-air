@@ -2,41 +2,32 @@
 //  Themis AIR — Post Detail Page (post.js)
 // ============================================================
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   const params = new URLSearchParams(window.location.search);
   const id = params.get('id');
   const root = document.getElementById('post-root');
 
-  if (!id) {
-    renderNotFound(root);
-    return;
-  }
+  if (!id) { renderNotFound(root); return; }
 
   const article = getArticleById(id);
-  if (!article) {
-    renderNotFound(root);
-    return;
-  }
+  if (!article) { renderNotFound(root); return; }
 
-  // Update page title
   document.title = `${article.title} — Themis AIR`;
+  if (typeof marked !== 'undefined') marked.setOptions({ breaks: true, gfm: true });
 
-  // Configure marked options
-  if (typeof marked !== 'undefined') {
-    marked.setOptions({ breaks: true, gfm: true });
-  }
-
-  renderPost(root, article);
+  await renderPost(root, article);
 });
 
-function renderPost(root, article) {
+async function renderPost(root, article) {
   const tagsHtml = (article.tags || [])
     .map(t => `<span class="tag" data-char="${t}"># ${t}</span>`)
     .join('');
 
+  // 先從 IndexedDB 還原圖片參照，再產生 HTML
+  const resolvedContent = await resolveImageRefs(article.content || '');
   const contentHtml = typeof marked !== 'undefined'
-    ? marked.parse(article.content || '')
-    : `<pre>${escHtml(article.content || '')}</pre>`;
+    ? marked.parse(resolvedContent)
+    : `<pre>${escHtml(resolvedContent)}</pre>`;
 
   root.innerHTML = `
     <a href="index.html" class="post-back">← 返回日誌列表</a>
