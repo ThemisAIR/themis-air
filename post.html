@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>日誌 — Themis AIR</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- ── Header ── -->
+  <header class="site-header">
+    <div class="header-inner">
+      <a href="index.html" class="site-logo">
+        <span class="logo-badge">⚖</span>
+        Themis AIR
+      </a>
+      <nav class="site-nav">
+        <a href="admin.html">✦ 管理後台</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- ── Main ── -->
+  <main>
+    <div class="post-container" id="post-root">
+      <!-- populated by post.js -->
+    </div>
+  </main>
+
+  <!-- ── Footer ── -->
+  <footer class="site-footer">
+    <p>Themis AIR &nbsp;·&nbsp; 個人遊戲日誌 &nbsp;·&nbsp; <span>以愛記錄</span></p>
+  </footer>
+
+  <div class="toast" id="global-toast"></div>
+
+  <!-- marked.js for Markdown rendering -->
+  <script src="https://cdn.jsdelivr.net/npm/marked@9/marked.min.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/post.js"></script>
+</body>
+</html>

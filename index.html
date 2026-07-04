@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Themis AIR — 個人未定事件簿遊戲進度日誌，記錄每一個值得留念的故事瞬間">
+  <title>Themis AIR</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- ── Header ── -->
+  <header class="site-header">
+    <div class="header-inner">
+      <a href="index.html" class="site-logo">
+        <span class="logo-badge">⚖</span>
+        Themis AIR
+      </a>
+      <nav class="site-nav">
+        <a href="admin.html" id="nav-admin">✦ 管理後台</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- ── Main ── -->
+  <main>
+    <div class="main-container">
+
+      <!-- Hero -->
+      <section class="page-hero">
+        <h1>遊戲日誌</h1>
+        <p>記錄每一個值得留念的故事瞬間</p>
+      </section>
+
+      <!-- Search -->
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input
+          type="text"
+          id="search-input"
+          placeholder="搜尋日誌標題或內容…"
+          autocomplete="off"
+          aria-label="搜尋日誌"
+        >
+      </div>
+
+      <!-- Tag filters -->
+      <div class="tag-filters" id="tag-filters" role="group" aria-label="標籤篩選">
+        <!-- populated by app.js -->
+      </div>
+
+      <!-- Articles grid -->
+      <div class="articles-grid" id="articles-grid" aria-live="polite">
+        <!-- populated by app.js -->
+      </div>
+
+    </div>
+  </main>
+
+  <!-- ── Footer ── -->
+  <footer class="site-footer">
+    <p>Themis AIR &nbsp;·&nbsp; 個人遊戲日誌 &nbsp;·&nbsp; <span>以愛記錄</span></p>
+  </footer>
+
+  <div class="toast" id="global-toast"></div>
+
+  <script src="js/data.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

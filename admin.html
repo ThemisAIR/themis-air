@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Themis AIR 管理後台 — 新增與編輯遊戲日誌">
+  <title>管理後台 — Themis AIR</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="admin-page">
+
+  <!-- ── Header ── -->
+  <header class="site-header">
+    <div class="header-inner">
+      <a href="index.html" class="site-logo">
+        <span class="logo-badge">⚖</span>
+        Themis AIR
+      </a>
+      <nav class="site-nav">
+        <a href="index.html">← 回首頁</a>
+        <a href="#" id="nav-logout" style="display:none">登出</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- ── Login Overlay ── -->
+  <div class="login-overlay" id="login-overlay">
+    <div class="login-card">
+      <div class="login-logo">
+        <span class="logo-badge">⚖</span>
+        Themis AIR
+      </div>
+      <h2>管理後台</h2>
+      <p class="subtitle">請輸入密碼以繼續</p>
+
+      <form id="login-form" novalidate>
+        <div class="form-group">
+          <label for="pw-input">密碼</label>
+          <input
+            type="password"
+            id="pw-input"
+            placeholder="輸入密碼…"
+            autocomplete="current-password"
+            required
+          >
+          <div class="form-error" id="pw-error"></div>
+        </div>
+        <button type="submit" class="btn btn-primary" style="width:100%">進入後台</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ── Admin Panel ── -->
+  <main id="admin-main" style="display:none">
+    <div class="admin-container">
+
+      <!-- Top bar -->
+      <div class="admin-top-bar">
+        <h2>✦ 管理後台</h2>
+        <button class="btn btn-gold" id="btn-new-article">+ 新增日誌</button>
+      </div>
+
+      <!-- Stats -->
+      <div class="admin-stats" id="admin-stats">
+        <!-- populated by JS -->
+      </div>
+
+      <!-- Edit / New form (hidden by default) -->
+      <div id="edit-panel-wrap" style="display:none"></div>
+
+      <!-- Article list -->
+      <div class="section-heading">
+        <span>📋</span> 所有日誌
+      </div>
+      <div class="admin-list" id="admin-list">
+        <!-- populated by JS -->
+      </div>
+
+    </div>
+  </main>
+
+  <div class="toast" id="global-toast"></div>
+
+  <!-- marked.js for preview -->
+  <script src="https://cdn.jsdelivr.net/npm/marked@9/marked.min.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/admin.js"></script>
+</body>
+</html>
