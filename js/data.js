@@ -125,11 +125,29 @@ async function uploadImage(filename, dataUrl) {
 
   if (!res.ok) {
     const e = await res.json().catch(() => ({}));
-    throw new Error(e.message || `圖片上傳失敗 ${res.status}`);
+    let msg = e.message || `上傳失敗 ${res.status}`;
+    if (res.status === 401) msg = 'Token 無效或已過期，請重新建立 Token';
+    else if (res.status === 403) msg = '權限不足：Token 需要 repo 權限';
+    else if (res.status === 404) msg = 'Token 沒有此倉庫的寫入權限（請確認 Token 是用「ThemisAIR 帳號」建立，且有勾選 repo 權限）';
+    else if (res.status === 409) msg = '衝突，請稍後重試';
+    throw new Error(msg);
   }
 
-  // 回傳公開 URL（raw.githubusercontent.com）
   return `${GH_RAW}/${path}`;
+}
+
+// 驗證 Token 是否有寫入權限
+async function verifyToken(token) {
+  const res = await fetch(`https://api.github.com/repos/${GH_OWNER}/${GH_REPO}`, {
+    headers: { 'Authorization': `token ${token}`, 'Accept': 'application/vnd.github.v3+json' }
+  });
+  if (res.status === 401) return { ok: false, msg: 'Token 無效或已過期' };
+  if (res.status === 404) return { ok: false, msg: '找不到倉庫，請確認 Token 屬於有存取權限的帳號' };
+  if (!res.ok)            return { ok: false, msg: `GitHub API 錯誤 ${res.status}` };
+  const data = await res.json();
+  const canWrite = data.permissions?.push || data.permissions?.admin || data.permissions?.maintain;
+  if (!canWrite) return { ok: false, msg: 'Token 對此倉庫沒有寫入(push)權限' };
+  return { ok: true, msg: `驗證成功 ✓（倉庫：${data.full_name}）` };
 }
 
 // ── GitHub Write Helper ────────────────────────────────────────

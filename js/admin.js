@@ -28,28 +28,54 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ── Auth ─────────────────────────────────────────────────────
 
-function handleLogin(e) {
+async function handleLogin(e) {
   e.preventDefault();
   const pw    = document.getElementById('pw-input').value;
   const token = document.getElementById('token-input')?.value?.trim() || '';
   const err   = document.getElementById('pw-error');
 
-  if (pw === ADMIN_PASSWORD) {
-    if (token) setPAT(token);
-    err.textContent = '';
-    isLoggedIn = true;
-    document.getElementById('login-overlay').style.display = 'none';
-    document.getElementById('admin-main').style.display   = 'block';
-    document.getElementById('nav-logout').style.display    = 'inline-flex';
-    loadAdminPanel();
-    if (window._pendingEdit) {
-      openEditor(window._pendingEdit);
-      window._pendingEdit = null;
-    }
-  } else {
+  if (pw !== ADMIN_PASSWORD) {
     err.textContent = '密碼錯誤，請再試一次';
     document.getElementById('pw-input').value = '';
     document.getElementById('pw-input').focus();
+    return;
+  }
+
+  // 驗證密碼通過，檢查 Token
+  if (token) {
+    const loginBtn = e.target.querySelector('button[type="submit"]');
+    loginBtn.disabled = true;
+    loginBtn.textContent = '驗證 Token 中…';
+    
+    try {
+      const res = await verifyToken(token);
+      if (!res.ok) {
+        err.textContent = 'Token 驗證失敗：' + res.msg;
+        loginBtn.disabled = false;
+        loginBtn.textContent = '進入後台';
+        return;
+      }
+      setPAT(token);
+    } catch (e) {
+      err.textContent = '驗證 Token 時發生網路錯誤，請重試。';
+      loginBtn.disabled = false;
+      loginBtn.textContent = '進入後台';
+      return;
+    }
+    
+    loginBtn.disabled = false;
+    loginBtn.textContent = '進入後台';
+  }
+
+  err.textContent = '';
+  isLoggedIn = true;
+  document.getElementById('login-overlay').style.display = 'none';
+  document.getElementById('admin-main').style.display   = 'block';
+  document.getElementById('nav-logout').style.display    = 'inline-flex';
+  loadAdminPanel();
+  if (window._pendingEdit) {
+    openEditor(window._pendingEdit);
+    window._pendingEdit = null;
   }
 }
 
@@ -163,13 +189,31 @@ function openTokenSettings() {
   document.body.appendChild(overlay);
   document.getElementById('settings-token').focus();
   document.getElementById('ts-cancel').addEventListener('click', () => overlay.remove());
-  document.getElementById('ts-save').addEventListener('click', () => {
+  document.getElementById('ts-save').addEventListener('click', async () => {
     const val = document.getElementById('settings-token').value.trim();
     if (!val) { showToast('請輸入 Token', 'error'); return; }
-    setPAT(val);
-    overlay.remove();
-    showToast('Token 已儲存 ✓', 'success');
-    loadAdminPanel();
+    
+    const saveBtn = document.getElementById('ts-save');
+    saveBtn.disabled = true;
+    saveBtn.textContent = '驗證中…';
+    
+    try {
+      const res = await verifyToken(val);
+      if (!res.ok) {
+        showToast('驗證失敗：' + res.msg, 'error', 6000);
+        saveBtn.disabled = false;
+        saveBtn.textContent = '儲存 Token';
+        return;
+      }
+      setPAT(val);
+      overlay.remove();
+      showToast(res.msg, 'success');
+      loadAdminPanel();
+    } catch (err) {
+      showToast('驗證出錯：' + err.message, 'error', 6000);
+      saveBtn.disabled = false;
+      saveBtn.textContent = '儲存 Token';
+    }
   });
 }
 
