@@ -9,7 +9,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   if (!id) { renderNotFound(root); return; }
 
-  const article = getArticleById(id);
+  const article = await getArticleById(id);
   if (!article) { renderNotFound(root); return; }
 
   document.title = `${article.title} — Themis AIR`;
