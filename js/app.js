@@ -8,12 +8,22 @@ let allArticles = [];
 
 // ── Init ────────────────────────────────────────────────────
 
-document.addEventListener('DOMContentLoaded', () => {
-  allArticles = getArticles();
+document.addEventListener('DOMContentLoaded', async () => {
+  // 顯示載入中
+  const grid = document.getElementById('articles-grid');
+  grid.innerHTML = '<div style="text-align:center;padding:3rem;color:var(--text-muted)">載入中…</div>';
+
+  try {
+    allArticles = await getArticles();
+  } catch (e) {
+    grid.innerHTML = `<div class="empty-state"><span class="empty-icon">⚠️</span>
+      <h3>無法載入文章</h3><p>${e.message}</p></div>`;
+    return;
+  }
+
   renderTagFilters();
   renderArticles();
 
-  // Search
   const searchInput = document.getElementById('search-input');
   searchInput.addEventListener('input', e => {
     searchQuery = e.target.value.trim().toLowerCase();

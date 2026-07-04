@@ -1,11 +1,11 @@
 // ============================================================
-//  Themis AIR — Admin Page (admin.js)
+//  Themis AIR — Admin Page  [v2: GitHub API]
 // ============================================================
 
 const ADMIN_PASSWORD = 'admin123';
 
-let isLoggedIn = false;
-let editingId = null;        // null = new article
+let isLoggedIn  = false;
+let editingId   = null;
 let selectedTags = [];
 
 // ── Init ─────────────────────────────────────────────────────
@@ -13,45 +13,35 @@ let selectedTags = [];
 document.addEventListener('DOMContentLoaded', () => {
   marked.setOptions({ breaks: true, gfm: true });
 
-  // Login form
+  // Pre-fill saved token
+  const ti = document.getElementById('token-input');
+  if (ti && getPAT()) ti.value = getPAT();
+
   document.getElementById('login-form').addEventListener('submit', handleLogin);
+  document.getElementById('btn-new-article').addEventListener('click', () => openEditor(null));
+  document.getElementById('nav-logout').addEventListener('click', e => { e.preventDefault(); logout(); });
 
-  // New article button
-  document.getElementById('btn-new-article').addEventListener('click', () => {
-    openEditor(null);
-  });
-
-  // Logout
-  document.getElementById('nav-logout').addEventListener('click', e => {
-    e.preventDefault();
-    logout();
-  });
-
-  // Check if we came from post page with ?edit=id
   const params = new URLSearchParams(window.location.search);
-  const editId = params.get('edit');
-  if (editId) {
-    // Auto-show login; after login, open editor for this id
-    window._pendingEdit = editId;
-  }
+  const editId  = params.get('edit');
+  if (editId) window._pendingEdit = editId;
 });
 
 // ── Auth ─────────────────────────────────────────────────────
 
 function handleLogin(e) {
   e.preventDefault();
-  const pw = document.getElementById('pw-input').value;
-  const err = document.getElementById('pw-error');
+  const pw    = document.getElementById('pw-input').value;
+  const token = document.getElementById('token-input')?.value?.trim() || '';
+  const err   = document.getElementById('pw-error');
 
   if (pw === ADMIN_PASSWORD) {
+    if (token) setPAT(token);
     err.textContent = '';
     isLoggedIn = true;
     document.getElementById('login-overlay').style.display = 'none';
-    document.getElementById('admin-main').style.display = 'block';
-    document.getElementById('nav-logout').style.display = 'inline-flex';
+    document.getElementById('admin-main').style.display   = 'block';
+    document.getElementById('nav-logout').style.display    = 'inline-flex';
     loadAdminPanel();
-
-    // If came from post page, open editor
     if (window._pendingEdit) {
       openEditor(window._pendingEdit);
       window._pendingEdit = null;
@@ -66,23 +56,31 @@ function handleLogin(e) {
 function logout() {
   isLoggedIn = false;
   document.getElementById('login-overlay').style.display = 'flex';
-  document.getElementById('admin-main').style.display = 'none';
-  document.getElementById('nav-logout').style.display = 'none';
+  document.getElementById('admin-main').style.display    = 'none';
+  document.getElementById('nav-logout').style.display     = 'none';
   document.getElementById('pw-input').value = '';
 }
 
 // ── Admin Panel ───────────────────────────────────────────────
 
-function loadAdminPanel() {
-  renderStats();
-  renderAdminList();
+async function loadAdminPanel() {
+  const listEl = document.getElementById('admin-list');
+  listEl.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--text-muted)">載入中…</div>';
+  try {
+    const articles = await getArticles();
+    renderStats(articles);
+    renderAdminList(articles);
+    if (!hasPAT()) showToast('尚未設定 GitHub Token，無法儲存或上傳圖片', 'info', 6000);
+  } catch (e) {
+    listEl.innerHTML = `<div class="empty-state"><span class="empty-icon">⚠️</span><p>${escHtml(e.message)}</p></div>`;
+    showToast('載入失敗：' + e.message, 'error', 5000);
+  }
 }
 
-function renderStats() {
-  const articles = getArticles();
+function renderStats(articles) {
   const tagCounts = {};
   articles.forEach(a => (a.tags || []).forEach(t => { tagCounts[t] = (tagCounts[t] || 0) + 1; }));
-  const topTag = Object.entries(tagCounts).sort((a,b) => b[1]-a[1])[0];
+  const topTag = Object.entries(tagCounts).sort((a, b) => b[1] - a[1])[0];
 
   document.getElementById('admin-stats').innerHTML = `
     <div class="stat-pill">
@@ -97,14 +95,20 @@ function renderStats() {
       <div class="stat-number" style="font-size:1.1rem">${topTag ? '#' + topTag[0] : '—'}</div>
       <div class="stat-label">最常用標籤</div>
     </div>
+    <div class="stat-pill" style="cursor:pointer" onclick="openTokenSettings()" title="點此設定 GitHub Token">
+      <div class="stat-number" style="font-size:1.1rem">${hasPAT() ? '✓' : '!'}</div>
+      <div class="stat-label" style="color:${hasPAT() ? 'var(--text-muted)' : '#AA7020'}">
+        ${hasPAT() ? 'Token 已設定' : '需設定 Token'}
+      </div>
+    </div>
   `;
 }
 
-function renderAdminList() {
-  const articles = getArticles().slice().sort((a,b) => (b.date || '').localeCompare(a.date || ''));
-  const list = document.getElementById('admin-list');
+function renderAdminList(articles) {
+  const sorted = articles.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const list   = document.getElementById('admin-list');
 
-  if (articles.length === 0) {
+  if (sorted.length === 0) {
     list.innerHTML = `
       <div class="empty-state" style="padding:2rem">
         <span class="empty-icon" style="font-size:2rem">📖</span>
@@ -113,7 +117,7 @@ function renderAdminList() {
     return;
   }
 
-  list.innerHTML = articles.map(a => `
+  list.innerHTML = sorted.map(a => `
     <div class="admin-item" id="item-${a.id}">
       <div class="admin-item-info">
         <div class="admin-item-title">${escHtml(a.title)}</div>
@@ -130,47 +134,70 @@ function renderAdminList() {
   `).join('');
 }
 
+// ── Token Settings ────────────────────────────────────────────
+
+function openTokenSettings() {
+  const overlay = document.createElement('div');
+  overlay.className = 'dialog-overlay';
+  overlay.innerHTML = `
+    <div class="dialog-box" style="max-width:500px">
+      <h4>🔑 GitHub Token 設定</h4>
+      <p style="font-size:.85rem;color:var(--text-secondary);margin-bottom:1rem;line-height:1.6">
+        需要具有 <code>repo</code> 權限的 Personal Access Token 才能儲存文章與上傳圖片。<br>
+        <a href="https://github.com/settings/tokens/new?description=ThemisAIR&scopes=repo"
+           target="_blank" rel="noopener" style="color:var(--lavender-dark)">
+          → 點此前往 GitHub 建立新 Token（記得勾選 repo）
+        </a>
+      </p>
+      <div class="form-group">
+        <label for="settings-token">Personal Access Token</label>
+        <input type="password" id="settings-token" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+               value="${escAttr(getPAT())}" autocomplete="off">
+      </div>
+      <div class="dialog-actions">
+        <button class="btn btn-secondary btn-sm" id="ts-cancel">取消</button>
+        <button class="btn btn-primary btn-sm" id="ts-save">儲存 Token</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  document.getElementById('settings-token').focus();
+  document.getElementById('ts-cancel').addEventListener('click', () => overlay.remove());
+  document.getElementById('ts-save').addEventListener('click', () => {
+    const val = document.getElementById('settings-token').value.trim();
+    if (!val) { showToast('請輸入 Token', 'error'); return; }
+    setPAT(val);
+    overlay.remove();
+    showToast('Token 已儲存 ✓', 'success');
+    loadAdminPanel();
+  });
+}
+
 // ── Editor ───────────────────────────────────────────────────
 
-function openEditor(id) {
-  editingId = id;
+async function openEditor(id) {
+  editingId    = id;
   selectedTags = [];
 
-  const article = id ? getArticleById(id) : null;
-  if (id && !article) {
-    showToast('找不到該篇日誌', 'error');
-    return;
-  }
-
-  if (article) {
-    selectedTags = [...(article.tags || [])];
-  }
+  const article = id ? await getArticleById(id) : null;
+  if (id && !article) { showToast('找不到該篇日誌', 'error'); return; }
+  if (article) selectedTags = [...(article.tags || [])];
 
   const wrap = document.getElementById('edit-panel-wrap');
   wrap.style.display = 'block';
-  wrap.innerHTML = buildEditorHTML(article);
-
-  // Scroll to editor
+  wrap.innerHTML     = buildEditorHTML(article);
   wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
-  // Init tag input
   initTagInput();
 
-  // Live markdown preview
-  const contentArea = document.getElementById('editor-content');
-  const previewBox = document.getElementById('preview-box');
-  const updatePreview = async () => {
-    const resolved = await resolveImageRefs(contentArea.value || '');
-    previewBox.innerHTML = marked.parse(resolved);
-  };
+  const contentArea  = document.getElementById('editor-content');
+  const previewBox   = document.getElementById('preview-box');
+  const updatePreview = () => { previewBox.innerHTML = marked.parse(contentArea.value || ''); };
   contentArea.addEventListener('input', updatePreview);
   updatePreview();
 
-  // Cancel — both buttons
   document.getElementById('btn-cancel-edit').addEventListener('click', closeEditor);
   document.getElementById('btn-cancel-edit-bottom')?.addEventListener('click', closeEditor);
-
-  // Save
   document.getElementById('form-edit').addEventListener('submit', handleSave);
 }
 
@@ -187,13 +214,9 @@ function buildEditorHTML(article) {
         <div class="form-row">
           <div class="form-group" style="grid-column: 1 / -1">
             <label for="editor-title">標題 *</label>
-            <input
-              type="text"
-              id="editor-title"
-              placeholder="輸入日誌標題…"
-              value="${escAttr(article ? article.title : '')}"
-              required
-            >
+            <input type="text" id="editor-title"
+                   placeholder="輸入日誌標題…"
+                   value="${escAttr(article ? article.title : '')}" required>
           </div>
         </div>
 
@@ -205,13 +228,8 @@ function buildEditorHTML(article) {
           <div class="form-group">
             <label>標籤</label>
             <div class="tags-field" id="tags-field">
-              <input
-                type="text"
-                class="tag-chip-input"
-                id="tag-chip-input"
-                placeholder="輸入或點選標籤…"
-                autocomplete="off"
-              >
+              <input type="text" class="tag-chip-input" id="tag-chip-input"
+                     placeholder="輸入或點選標籤…" autocomplete="off">
             </div>
             <div class="tag-suggestions" id="tag-suggestions">
               ${DEFAULT_TAGS.map(t =>
@@ -225,7 +243,6 @@ function buildEditorHTML(article) {
           <div class="editor-pane">
             <label for="editor-content">內容（支援 Markdown）</label>
 
-            <!-- Toolbar -->
             <div class="editor-toolbar" id="editor-toolbar">
               <button type="button" class="toolbar-btn" onclick="wrapText('**','**')" title="粗體"><b>B</b></button>
               <button type="button" class="toolbar-btn" onclick="wrapText('*','*')" title="斜體"><i>I</i></button>
@@ -240,9 +257,7 @@ function buildEditorHTML(article) {
               <button type="button" class="toolbar-btn" onclick="openImageDialog()" title="插入圖片">📷 插入圖片</button>
             </div>
 
-            <textarea
-              id="editor-content"
-              class="has-toolbar"
+            <textarea id="editor-content" class="has-toolbar"
               placeholder="在這裡寫日誌內容…&#10;&#10;支援 **粗體**、*斜體*、## 標題、> 引言、- 清單等 Markdown 語法"
             >${article ? escHtml(article.content || '') : ''}</textarea>
           </div>
@@ -254,23 +269,22 @@ function buildEditorHTML(article) {
 
         <div class="form-actions">
           <button type="button" class="btn btn-ghost" id="btn-cancel-edit-bottom">取消</button>
-          <button type="submit" class="btn btn-primary">💾 儲存日誌</button>
+          <button type="submit" class="btn btn-primary" id="btn-save">💾 儲存日誌</button>
         </div>
       </form>
     </div>
   `;
 }
 
-
 function closeEditor() {
   const wrap = document.getElementById('edit-panel-wrap');
   wrap.style.display = 'none';
   wrap.innerHTML = '';
-  editingId = null;
+  editingId    = null;
   selectedTags = [];
 }
 
-function handleSave(e) {
+async function handleSave(e) {
   e.preventDefault();
 
   const title = document.getElementById('editor-title').value.trim();
@@ -280,25 +294,33 @@ function handleSave(e) {
     return;
   }
 
-  // 先記住是新增還是編輯（closeEditor 會把 editingId 清掉）
-  const isNew = !editingId;
+  if (!hasPAT()) {
+    showToast('請先設定 GitHub Token（點後台右上角的 Token 設定）', 'error', 6000);
+    openTokenSettings();
+    return;
+  }
 
+  const isNew = !editingId;
   const article = {
-    id: editingId || generateId(),
+    id:      editingId || generateId(),
     title,
-    date: document.getElementById('editor-date').value || new Date().toISOString().slice(0, 10),
-    tags: [...selectedTags],
+    date:    document.getElementById('editor-date').value || new Date().toISOString().slice(0, 10),
+    tags:    [...selectedTags],
     content: document.getElementById('editor-content').value,
   };
 
+  const saveBtn = document.getElementById('btn-save');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '儲存中…'; }
+
   try {
-    saveArticle(article);
+    await saveArticle(article);
     closeEditor();
-    loadAdminPanel();
-    showToast(isNew ? '新增成功！日誌已儲存 ✓' : '日誌已更新 ✓', 'success');
+    await loadAdminPanel();
+    showToast(isNew ? '新增成功！已儲存至 GitHub ✓' : '日誌已更新至 GitHub ✓', 'success');
   } catch (err) {
     console.error('[Themis AIR] 儲存失敗：', err);
-    showToast('儲存失敗：' + (err.message || '請檢查瀏覽器儲存空間'), 'error');
+    showToast('儲存失敗：' + (err.message || '請確認 GitHub Token 是否正確'), 'error', 6000);
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '💾 儲存日誌'; }
   }
 }
 
@@ -307,14 +329,10 @@ function handleSave(e) {
 function initTagInput() {
   renderTagChips();
 
-  // Suggestion clicks
   document.querySelectorAll('.tag-sugg').forEach(el => {
-    el.addEventListener('click', () => {
-      addTag(el.dataset.tag);
-    });
+    el.addEventListener('click', () => addTag(el.dataset.tag));
   });
 
-  // Typing in the input
   const input = document.getElementById('tag-chip-input');
   input.addEventListener('keydown', e => {
     if ((e.key === 'Enter' || e.key === ',') && input.value.trim()) {
@@ -326,7 +344,6 @@ function initTagInput() {
     }
   });
 
-  // Click on field = focus input
   document.getElementById('tags-field').addEventListener('click', () => {
     document.getElementById('tag-chip-input').focus();
   });
@@ -356,11 +373,11 @@ function renderTagChips() {
     chip.querySelector('.rm').addEventListener('click', () => removeTag(tag));
     field.appendChild(chip);
   });
-  field.appendChild(input || createTagInput());
+  field.appendChild(input || _createTagInput());
   document.getElementById('tag-chip-input')?.focus();
 }
 
-function createTagInput() {
+function _createTagInput() {
   const input = document.createElement('input');
   input.type = 'text';
   input.className = 'tag-chip-input';
@@ -370,7 +387,7 @@ function createTagInput() {
   return input;
 }
 
-// ── Delete ───────────────────────────────────────────────────
+// ── Delete ────────────────────────────────────────────────────
 
 function confirmDeleteAdmin(id, title) {
   const overlay = document.createElement('div');
@@ -388,70 +405,48 @@ function confirmDeleteAdmin(id, title) {
   document.body.appendChild(overlay);
 
   document.getElementById('dlg-cancel').addEventListener('click', () => overlay.remove());
-  document.getElementById('dlg-confirm').addEventListener('click', () => {
-    deleteArticle(id);
-    overlay.remove();
-    // If currently editing this article, close editor
-    if (editingId === id) closeEditor();
-    loadAdminPanel();
-    showToast('日誌已刪除', 'info');
+  document.getElementById('dlg-confirm').addEventListener('click', async () => {
+    const btn = document.getElementById('dlg-confirm');
+    btn.disabled = true; btn.textContent = '刪除中…';
+    try {
+      await deleteArticle(id);
+      overlay.remove();
+      if (editingId === id) closeEditor();
+      await loadAdminPanel();
+      showToast('日誌已刪除', 'info');
+    } catch (err) {
+      showToast('刪除失敗：' + err.message, 'error');
+      btn.disabled = false; btn.textContent = '確定刪除';
+    }
   });
 }
 
-// ── Utilities ────────────────────────────────────────────────
+// ── Toolbar Helpers ───────────────────────────────────────────
 
-function escHtml(str) {
-  const d = document.createElement('div');
-  d.textContent = String(str);
-  return d.innerHTML;
-}
+function getEditorTextarea() { return document.getElementById('editor-content'); }
 
-function escAttr(str) {
-  return String(str).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}
-
-// ── Toolbar helpers ───────────────────────────────────────────
-
-function getEditorTextarea() {
-  return document.getElementById('editor-content');
-}
-
-// Wrap selected text with before/after markers (e.g. **bold**)
 function wrapText(before, after) {
-  const ta = getEditorTextarea();
-  if (!ta) return;
-  const start = ta.selectionStart;
-  const end   = ta.selectionEnd;
+  const ta = getEditorTextarea(); if (!ta) return;
+  const start = ta.selectionStart, end = ta.selectionEnd;
   const selected = ta.value.slice(start, end) || '文字';
-  const replacement = before + selected + after;
-  ta.setRangeText(replacement, start, end, 'select');
-  ta.focus();
-  ta.dispatchEvent(new Event('input'));
+  ta.setRangeText(before + selected + after, start, end, 'select');
+  ta.focus(); ta.dispatchEvent(new Event('input'));
 }
 
-// Insert a line prefix at cursor (e.g. ## , - , > )
 function insertLine(prefix) {
-  const ta = getEditorTextarea();
-  if (!ta) return;
+  const ta = getEditorTextarea(); if (!ta) return;
   const pos = ta.selectionStart;
-  // Find start of current line
-  const before = ta.value.lastIndexOf('\n', pos - 1) + 1;
-  const lineStart = ta.value.slice(before, pos);
-  // If line is empty or we're at start, just insert prefix
-  const insert = (lineStart.trim() === '') ? prefix : '\n' + prefix;
+  const lineStart = ta.value.slice(ta.value.lastIndexOf('\n', pos - 1) + 1, pos);
+  const insert = lineStart.trim() === '' ? prefix : '\n' + prefix;
   ta.setRangeText(insert, pos, pos, 'end');
-  ta.focus();
-  ta.dispatchEvent(new Event('input'));
+  ta.focus(); ta.dispatchEvent(new Event('input'));
 }
 
-// Insert arbitrary text at cursor
 function insertAtCursor(text) {
-  const ta = getEditorTextarea();
-  if (!ta) return;
+  const ta = getEditorTextarea(); if (!ta) return;
   const pos = ta.selectionStart;
   ta.setRangeText(text, pos, pos, 'end');
-  ta.focus();
-  ta.dispatchEvent(new Event('input'));
+  ta.focus(); ta.dispatchEvent(new Event('input'));
 }
 
 // ── Image Dialog ─────────────────────────────────────────────
@@ -468,7 +463,7 @@ function openImageDialog() {
         <button class="img-tab" data-panel="url">圖片網址</button>
       </div>
 
-      <!-- Tab: 本地上傳（支援多選） -->
+      <!-- 本地上傳（多選）-->
       <div class="img-tab-panel active" id="panel-upload">
         <div class="img-upload-area" id="upload-area">
           <span class="upload-icon">🖼️</span>
@@ -476,10 +471,10 @@ function openImageDialog() {
           <input type="file" id="img-file-input" accept="image/*" multiple style="display:none">
         </div>
         <div id="img-thumb-grid" style="display:none;margin-top:.75rem"></div>
-        <p class="img-note">⚠️ 圖片以 base64 嵌入文章，單張建議不超過 1MB。</p>
+        <p class="img-note">圖片將上傳至 GitHub repo，完成後以正常網址插入文章。</p>
       </div>
 
-      <!-- Tab: 圖片網址 -->
+      <!-- 圖片網址 -->
       <div class="img-tab-panel" id="panel-url">
         <div class="form-group">
           <label for="img-url-input">圖片網址（URL）</label>
@@ -489,7 +484,7 @@ function openImageDialog() {
           <label for="img-alt-input">圖片說明（選填）</label>
           <input type="text" id="img-alt-input" placeholder="圖片說明文字">
         </div>
-        <p class="img-note">💡 可將圖片上傳到 Imgur、Google 相簿後貼上連結。</p>
+        <p class="img-note">💡 也可以使用 Imgur、Google 相簿等圖床的分享連結。</p>
       </div>
 
       <div class="dialog-actions" style="margin-top:1.25rem">
@@ -512,60 +507,40 @@ function openImageDialog() {
     });
   });
 
-  // ── 本地上傳（多圖） ───────────────────────────────────────
-  let loadedImages = []; // [{ name, dataUrl }]
+  // 上傳區 click & drag
+  let loadedImages = [];
   const uploadArea = document.getElementById('upload-area');
   const fileInput  = document.getElementById('img-file-input');
   const thumbGrid  = document.getElementById('img-thumb-grid');
 
   uploadArea.addEventListener('click', () => fileInput.click());
-
-  uploadArea.addEventListener('dragover', e => {
-    e.preventDefault();
-    uploadArea.classList.add('dragover');
-  });
+  uploadArea.addEventListener('dragover', e => { e.preventDefault(); uploadArea.classList.add('dragover'); });
   uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
   uploadArea.addEventListener('drop', e => {
-    e.preventDefault();
-    uploadArea.classList.remove('dragover');
+    e.preventDefault(); uploadArea.classList.remove('dragover');
     processFiles([...e.dataTransfer.files]);
   });
-
-  fileInput.addEventListener('change', () => {
-    processFiles([...fileInput.files]);
-  });
+  fileInput.addEventListener('change', () => processFiles([...fileInput.files]));
 
   function processFiles(files) {
     const imgs = files.filter(f => f.type.startsWith('image/'));
     if (!imgs.length) { showToast('請選擇圖片檔案', 'error'); return; }
-
     loadedImages = [];
     thumbGrid.innerHTML = '<p style="font-size:.8rem;color:var(--text-muted)">讀取中…</p>';
     thumbGrid.style.display = 'block';
-
     let done = 0;
     const results = new Array(imgs.length);
-
     imgs.forEach((file, i) => {
       const reader = new FileReader();
       reader.onload = ev => {
         results[i] = { name: file.name, dataUrl: ev.target.result };
-        done++;
-        if (done === imgs.length) {
-          loadedImages = results;
-          renderThumbs();
-        }
+        if (++done === imgs.length) { loadedImages = results; renderThumbs(); }
       };
       reader.readAsDataURL(file);
     });
-
-    // Update upload area label
     uploadArea.innerHTML = `<span class="upload-icon">✅</span>已選取 ${imgs.length} 張圖片
       <input type="file" id="img-file-input" accept="image/*" multiple style="display:none">`;
-    // Re-bind after innerHTML reset
-    document.getElementById('img-file-input').addEventListener('change', ev => {
-      processFiles([...ev.target.files]);
-    });
+    document.getElementById('img-file-input').addEventListener('change', ev => processFiles([...ev.target.files]));
   }
 
   function renderThumbs() {
@@ -575,46 +550,50 @@ function openImageDialog() {
     loadedImages.forEach((img, i) => {
       const cell = document.createElement('div');
       cell.style.cssText = 'position:relative;border:1px solid var(--border);border-radius:8px;overflow:hidden;aspect-ratio:1';
-      cell.innerHTML = `
-        <img src="${img.dataUrl}" style="width:100%;height:100%;object-fit:cover" alt="${escHtml(img.name)}">
-        <button type="button" onclick="this.closest('[data-idx]').remove()" data-remove="${i}"
-          style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,.55);color:#fff;
-                 border:none;border-radius:50%;width:18px;height:18px;font-size:.75rem;
-                 cursor:pointer;display:flex;align-items:center;justify-content:center">×</button>
-      `;
-      cell.dataset.idx = i;
-      cell.querySelector('[data-remove]').addEventListener('click', () => {
-        loadedImages.splice(i, 1);
-        renderThumbs();
-      });
+      cell.innerHTML = `<img src="${img.dataUrl}" style="width:100%;height:100%;object-fit:cover" alt="${escHtml(img.name)}">
+        <button type="button" style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,.55);color:#fff;
+          border:none;border-radius:50%;width:18px;height:18px;font-size:.75rem;cursor:pointer;
+          display:flex;align-items:center;justify-content:center">×</button>`;
+      cell.querySelector('button').addEventListener('click', () => { loadedImages.splice(i, 1); renderThumbs(); });
       grid.appendChild(cell);
     });
     thumbGrid.appendChild(grid);
-    const count = document.createElement('p');
-    count.className = 'img-note';
-    count.style.marginTop = '.4rem';
-    count.textContent = `共 ${loadedImages.length} 張，將依序插入文章`;
-    thumbGrid.appendChild(count);
+    const p = document.createElement('p');
+    p.className = 'img-note'; p.style.marginTop = '.4rem';
+    p.textContent = `共 ${loadedImages.length} 張，將上傳至 GitHub 並依序插入`;
+    thumbGrid.appendChild(p);
   }
 
   // Cancel
   document.getElementById('img-cancel').addEventListener('click', () => overlay.remove());
 
-  // Confirm — 圖片存 IndexedDB，文章插入 idb:// 參照
+  // Confirm — 上傳到 GitHub repo
   document.getElementById('img-confirm').addEventListener('click', async () => {
     if (activePanel === 'upload') {
       if (!loadedImages.length) { showToast('請先選擇圖片', 'error'); return; }
-      try {
-        const refs = await Promise.all(loadedImages.map(async img => {
-          const id = genImgId();
-          await storeImageIDB(id, img.dataUrl);
-          return `![${escHtml(img.name)}](idb://${id})`;
-        }));
-        insertAtCursor('\n\n' + refs.join('\n\n') + '\n\n');
-        showToast(`已插入 ${loadedImages.length} 張圖片 ✓`, 'success');
-      } catch (err) {
-        showToast('圖片儲存失敗：' + err.message, 'error');
+      if (!hasPAT()) {
+        showToast('請先設定 GitHub Token 才能上傳圖片', 'error', 5000);
+        overlay.remove();
+        openTokenSettings();
         return;
+      }
+
+      const btn = document.getElementById('img-confirm');
+      btn.disabled = true;
+      const refs = [];
+      try {
+        for (let i = 0; i < loadedImages.length; i++) {
+          btn.textContent = `上傳中 ${i + 1}/${loadedImages.length}…`;
+          const img = loadedImages[i];
+          const url = await uploadImage(img.name, img.dataUrl);
+          refs.push(`![${escHtml(img.name)}](${url})`);
+        }
+        insertAtCursor('\n\n' + refs.join('\n\n') + '\n\n');
+        showToast(`已上傳並插入 ${refs.length} 張圖片 ✓`, 'success');
+        overlay.remove();
+      } catch (err) {
+        showToast('圖片上傳失敗：' + err.message, 'error', 6000);
+        btn.disabled = false; btn.textContent = '插入圖片';
       }
     } else {
       const url = document.getElementById('img-url-input').value.trim();
@@ -622,10 +601,18 @@ function openImageDialog() {
       const alt = document.getElementById('img-alt-input').value.trim() || '圖片';
       insertAtCursor(`\n\n![${alt}](${url})\n\n`);
       showToast('圖片已插入 ✓', 'success');
+      overlay.remove();
     }
-    overlay.remove();
   });
 
-  // Click outside to close
   overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+}
+
+// ── Utilities ────────────────────────────────────────────────
+
+function escHtml(str) {
+  const d = document.createElement('div'); d.textContent = String(str); return d.innerHTML;
+}
+function escAttr(str) {
+  return String(str).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }

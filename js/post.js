@@ -23,11 +23,9 @@ async function renderPost(root, article) {
     .map(t => `<span class="tag" data-char="${t}"># ${t}</span>`)
     .join('');
 
-  // 先從 IndexedDB 還原圖片參照，再產生 HTML
-  const resolvedContent = await resolveImageRefs(article.content || '');
   const contentHtml = typeof marked !== 'undefined'
-    ? marked.parse(resolvedContent)
-    : `<pre>${escHtml(resolvedContent)}</pre>`;
+    ? marked.parse(article.content || '')
+    : `<pre>${escHtml(article.content || '')}</pre>`;
 
   root.innerHTML = `
     <a href="index.html" class="post-back">← 返回日誌列表</a>
