@@ -19,6 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('login-form').addEventListener('submit', handleLogin);
   document.getElementById('btn-new-article').addEventListener('click', () => openEditor(null));
+  document.getElementById('btn-site-settings').addEventListener('click', openSiteSettings);
   document.getElementById('nav-logout').addEventListener('click', e => { e.preventDefault(); logout(); });
 
   const params = new URLSearchParams(window.location.search);
@@ -660,6 +661,54 @@ function escHtml(str) {
 }
 function escAttr(str) {
   return String(str).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// ── Site Settings Dialog ─────────────────────────────────────────
+
+async function openSiteSettings() {
+  const settings = await getSettings().catch(() => ({ heroTitle: '遊戲日誌', heroSubtitle: '記錄每一個值得留念的故事瞬間' }));
+
+  const overlay = document.createElement('div');
+  overlay.className = 'dialog-overlay';
+  overlay.innerHTML = `
+    <div class="dialog-box" style="max-width:480px">
+      <h4>⚙️ 網站設定</h4>
+      <p style="font-size:.82rem;color:var(--text-muted);margin:.4rem 0 1rem">設定首頁顯示的標題與副標題文字。</p>
+      <div class="form-group">
+        <label for="ss-title">首頁大標題</label>
+        <input type="text" id="ss-title" value="${escAttr(settings.heroTitle || '遊戲日誌')}">
+      </div>
+      <div class="form-group">
+        <label for="ss-subtitle">首頁副標題</label>
+        <input type="text" id="ss-subtitle" value="${escAttr(settings.heroSubtitle || '')}">
+      </div>
+      <div class="dialog-actions" style="margin-top:1.25rem">
+        <button class="btn btn-secondary btn-sm" id="ss-cancel">取消</button>
+        <button class="btn btn-primary btn-sm" id="ss-save">儲存設定</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  document.getElementById('ss-title').focus();
+
+  document.getElementById('ss-cancel').addEventListener('click', () => overlay.remove());
+  document.getElementById('ss-save').addEventListener('click', async () => {
+    const btn = document.getElementById('ss-save');
+    btn.disabled = true; btn.textContent = '儲存中…';
+    try {
+      const newSettings = {
+        heroTitle:    document.getElementById('ss-title').value.trim() || '遊戲日誌',
+        heroSubtitle: document.getElementById('ss-subtitle').value.trim()
+      };
+      await saveSettings(newSettings);
+      overlay.remove();
+      showToast('網站設定已更新 ✓', 'success');
+    } catch (err) {
+      showToast('儲存失敗：' + err.message, 'error');
+      btn.disabled = false; btn.textContent = '儲存設定';
+    }
+  });
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
 }
 
 // ── YouTube Dialog ────────────────────────────────────────────

@@ -11,6 +11,7 @@ const GH_REPO     = 'themis-air';
 const GH_BRANCH   = 'main';
 const GH_ARTICLES = 'data/articles.json';
 const GH_IMAGES   = 'data/images';
+const GH_SETTINGS = 'data/settings.json';
 
 const GH_API = `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents`;
 const GH_RAW = `https://raw.githubusercontent.com/${GH_OWNER}/${GH_REPO}/${GH_BRANCH}`;
@@ -200,6 +201,33 @@ async function getAllTags() {
 
 function generateId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+// ── Site Settings ─────────────────────────────────────────────
+
+const SETTINGS_CACHE = 'themisair_settings';
+const SETTINGS_DEFAULT = { heroTitle: '遊戲日誌', heroSubtitle: '記錄每一個值得留念的故事瞬間' };
+
+async function getSettings() {
+  const cached = (() => { try { return JSON.parse(localStorage.getItem(SETTINGS_CACHE)); } catch { return null; } })();
+  _refreshSettings().catch(() => {});
+  return cached || _refreshSettings();
+}
+
+async function _refreshSettings() {
+  const res = await fetch(`${GH_RAW}/${GH_SETTINGS}?_=${Date.now()}`);
+  if (!res.ok) return SETTINGS_DEFAULT;
+  const s = await res.json();
+  try { localStorage.setItem(SETTINGS_CACHE, JSON.stringify(s)); } catch {}
+  return s;
+}
+
+async function saveSettings(settings) {
+  if (!hasPAT()) throw new Error('請先設定 GitHub Token');
+  const res = await fetch(`${GH_API}/${GH_SETTINGS}`, { headers: _ghHeaders() });
+  const sha = res.ok ? (await res.json()).sha : null;
+  await _pushJSON(GH_SETTINGS, settings, sha, 'update site settings');
+  try { localStorage.setItem(SETTINGS_CACHE, JSON.stringify(settings)); } catch {}
 }
 
 // ── Toast ──────────────────────────────────────────────────────

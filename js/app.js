@@ -24,6 +24,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   renderTagFilters();
   renderArticles();
 
+  // 套用網站設定（標題、副標題）
+  getSettings().then(s => {
+    const t = document.getElementById('hero-title');
+    const p = document.getElementById('hero-subtitle');
+    if (t && s.heroTitle)    t.textContent = s.heroTitle;
+    if (p && s.heroSubtitle) p.textContent = s.heroSubtitle;
+  }).catch(() => {});
+
   const searchInput = document.getElementById('search-input');
   searchInput.addEventListener('input', e => {
     searchQuery = e.target.value.trim().toLowerCase();
