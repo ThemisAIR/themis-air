@@ -299,6 +299,7 @@ function buildEditorHTML(article) {
               <button type="button" class="toolbar-btn" onclick="insertLine('---')" title="分隔線">—</button>
               <div class="toolbar-sep"></div>
               <button type="button" class="toolbar-btn" onclick="openImageDialog()" title="插入圖片">📷 插入圖片</button>
+              <button type="button" class="toolbar-btn" onclick="openYoutubeDialog()" title="插入 YouTube 影片">▶ YouTube</button>
             </div>
 
             <textarea id="editor-content" class="has-toolbar"
@@ -659,4 +660,60 @@ function escHtml(str) {
 }
 function escAttr(str) {
   return String(str).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// ── YouTube Dialog ────────────────────────────────────────────
+
+function openYoutubeDialog() {
+  const overlay = document.createElement('div');
+  overlay.className = 'img-dialog-overlay';
+  overlay.innerHTML = `
+    <div class="img-dialog">
+      <h4>▶ 插入 YouTube 影片</h4>
+      <div class="form-group" style="margin-top:.75rem">
+        <label for="yt-url-input">YouTube 影片連結</label>
+        <input type="url" id="yt-url-input"
+               placeholder="https://www.youtube.com/watch?v=...">
+      </div>
+      <p class="img-note">💡 支援 youtube.com/watch、youtu.be 短網址、youtube.com/shorts 等格式。</p>
+      <div class="dialog-actions" style="margin-top:1.25rem">
+        <button class="btn btn-secondary btn-sm" id="yt-cancel">取消</button>
+        <button class="btn btn-primary btn-sm" id="yt-confirm">插入影片</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  document.getElementById('yt-url-input').focus();
+
+  function extractVideoId(url) {
+    const patterns = [
+      /[?&]v=([a-zA-Z0-9_-]{11})/,     // watch?v=
+      /youtu\.be\/([a-zA-Z0-9_-]{11})/, // youtu.be/
+      /\/shorts\/([a-zA-Z0-9_-]{11})/,  // shorts/
+      /\/embed\/([a-zA-Z0-9_-]{11})/,   // embed/
+    ];
+    for (const p of patterns) {
+      const m = url.match(p);
+      if (m) return m[1];
+    }
+    return null;
+  }
+
+  const confirm = () => {
+    const url = document.getElementById('yt-url-input').value.trim();
+    if (!url) { showToast('請輸入 YouTube 連結', 'error'); return; }
+    const videoId = extractVideoId(url);
+    if (!videoId) { showToast('無法識別 YouTube 連結格式，請確認網址是否正確', 'error'); return; }
+    const embed = `\n\n<div class="yt-embed"><iframe src="https://www.youtube.com/embed/${videoId}" allowfullscreen loading="lazy" title="YouTube video"></iframe></div>\n\n`;
+    insertAtCursor(embed);
+    showToast('YouTube 影片已插入 ✓', 'success');
+    overlay.remove();
+  };
+
+  document.getElementById('yt-cancel').addEventListener('click', () => overlay.remove());
+  document.getElementById('yt-confirm').addEventListener('click', confirm);
+  document.getElementById('yt-url-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') confirm();
+  });
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
 }
