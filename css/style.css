@@ -83,12 +83,12 @@ body {
 }
 
 .site-logo {
-  font-family: 'Noto Serif TC', serif;
+  font-family: 'HakkouMincho', 'Noto Serif TC', serif;
   font-size: 1.3rem;
-  font-weight: 600;
+  font-weight: normal;
   color: var(--gold-light);
   text-decoration: none;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.12em;
   display: flex;
   align-items: center;
   gap: 0.55rem;
