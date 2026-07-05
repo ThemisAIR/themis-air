@@ -89,6 +89,7 @@ body {
   color: var(--gold-light);
   text-decoration: none;
   letter-spacing: 0.12em;
+  -webkit-text-stroke: 0.4px var(--gold-light);
   display: flex;
   align-items: center;
   gap: 0.55rem;
@@ -171,6 +172,7 @@ body {
   font-weight: normal;
   color: var(--text-primary);
   letter-spacing: 0.15em;
+  -webkit-text-stroke: 0.4px var(--text-primary);
   margin-bottom: 0.5rem;
 }
 
